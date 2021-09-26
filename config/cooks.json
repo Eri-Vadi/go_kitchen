@@ -1,0 +1,28 @@
+{
+  "cooks": [
+    {
+      "rank": 3,
+      "proficiency": 3,
+      "name": "Cook1",
+      "catch_phrase": "I am 1"
+    },
+    {
+      "rank": 3,
+      "proficiency": 3,
+      "name": "Cook2",
+      "catch_phrase": "I am 2"
+    },
+    {
+      "rank": 2,
+      "proficiency": 3,
+      "name": "Cook3",
+      "catch_phrase": "I am 3"
+    },
+    {
+      "rank": 3,
+      "proficiency": 4,
+      "name": "Cook4",
+      "catch_phrase": "I am 4"
+    }
+  ]
+}
