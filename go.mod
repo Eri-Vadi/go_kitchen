@@ -1,4 +1,4 @@
-module github.com/foxfurry/go_kitchen
+module github.com/Eri-Vadi/go_kitchen
 
 go 1.17
 
