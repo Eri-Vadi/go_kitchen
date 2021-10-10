@@ -1,18 +1,13 @@
 package controller
 
 import (
-	"bytes"
-	"encoding/json"
-	"log"
-	"net/http"
-
 	"github.com/Eri-Vadi/go_kitchen/internal/domain/dto"
 	"github.com/Eri-Vadi/go_kitchen/internal/domain/repository"
 	"github.com/Eri-Vadi/go_kitchen/internal/http/httperr"
 	"github.com/Eri-Vadi/go_kitchen/internal/infrastracture/logger"
 	"github.com/Eri-Vadi/go_kitchen/internal/service/supervisor"
 	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
+	"net/http"
 )
 
 const CurrentCaller = "Kitchen Controller"
@@ -21,6 +16,7 @@ type IController interface {
 	menu(c *gin.Context)
 	order(c *gin.Context)
 	RegisterKitchenRoutes(c *gin.Engine)
+	Initialize()
 }
 
 type KitchenController struct {
@@ -33,16 +29,20 @@ func NewKitchenController() IController {
 	}
 }
 
-func (ctrl *KitchenController) menu(c *gin.Context) {
+func (ctrl *KitchenController) Initialize(){
+	ctrl.super.Initialize()
+}
+
+func (ctrl *KitchenController) menu(c *gin.Context){
 	var response dto.Menu
 
 	response.Items = repository.GetFoods()
 	response.ItemsCount = len(response.Items)
-
+	logger.LogMessageF("Menu request was fulfilled: %d items available", response.ItemsCount)
 	c.JSON(http.StatusOK, response)
 }
 
-func (ctrl *KitchenController) order(c *gin.Context) {
+func (ctrl *KitchenController) order(c *gin.Context){
 	var currentOrder dto.Order
 
 	if err := c.ShouldBindJSON(&currentOrder); err != nil {
@@ -50,21 +50,9 @@ func (ctrl *KitchenController) order(c *gin.Context) {
 		return
 	}
 
-	log.Printf("%+v", currentOrder)
-	ctrl.super.PrepareOrder(currentOrder)
 
-	logger.LogMessageF("Order %v completed", currentOrder.OrderID)
-
-	resp := dto.Distribution{}
-	resp.TableID = currentOrder.TableID
-
-	jsonBody, err := json.Marshal(resp)
-	if err != nil {
-		log.Panic(err)
-	}
-	contentType := "application/json"
-
-	http.Post(viper.GetString("dining_host")+"/distribution", contentType, bytes.NewReader(jsonBody))
+	logger.LogMessageF("Got a new order: %v", currentOrder.Items)
+	ctrl.super.AddOrder(currentOrder)
 
 	return
 }
