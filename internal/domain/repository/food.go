@@ -2,21 +2,20 @@ package repository
 
 import (
 	"encoding/json"
+	"github.com/Eri-Vadi/go_kitchen/internal/domain/entity"
+	"github.com/Eri-Vadi/go_kitchen/internal/infrastracture/logger"
 	"io/ioutil"
 	"os"
 	"sync"
-
-	"github.com/Eri-Vadi/go_kitchen/internal/domain/entity"
-	"github.com/Eri-Vadi/go_kitchen/internal/infrastracture/logger"
 )
 
 var (
-	foods    []entity.Food
+	foods []entity.Food
 	onceFood sync.Once
 )
 
-func GetFoods() []entity.Food {
-	onceFood.Do(func() {
+func GetFoods() []entity.Food{
+	onceFood.Do(func(){
 		foodsHolder := struct {
 			Data []entity.Food `json:"foods"`
 		}{}
@@ -25,7 +24,7 @@ func GetFoods() []entity.Food {
 		byteValue, _ := ioutil.ReadAll(jsonFile)
 
 		if err := json.Unmarshal(byteValue, &foodsHolder); err != nil {
-			logger.LogPanicF("Could not unmarshal foods config: %v", err)
+			logger.LogPanicf("Could not unmarshal foods config: %v", err)
 		}
 
 		foods = foodsHolder.Data
