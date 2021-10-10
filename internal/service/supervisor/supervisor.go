@@ -1,73 +1,110 @@
 package supervisor
 
 import (
-	"sync"
-	"time"
-
 	"github.com/Eri-Vadi/go_kitchen/internal/domain/dto"
 	"github.com/Eri-Vadi/go_kitchen/internal/domain/entity"
 	"github.com/Eri-Vadi/go_kitchen/internal/domain/repository"
 	"github.com/Eri-Vadi/go_kitchen/internal/infrastracture/logger"
+	"github.com/Eri-Vadi/go_kitchen/internal/infrastracture/priorityqueue"
 	"github.com/Eri-Vadi/go_kitchen/internal/service/cook"
+	"sync"
+	"time"
 )
 
 type ISupervisor interface {
-	PrepareOrder(order dto.Order)
+	AddOrder(order dto.Order)
+	Initialize()
 }
 
 type KitchenSupervisor struct {
+	queueMutex sync.Mutex
+	queue priorityqueue.IQueue
+
 	cooksMutex sync.Mutex
-	cooks      []cook.Cook
+	cooks []cook.Cook
 
 	foodsMutex sync.Mutex
-	foods      []entity.Food
+	foods []entity.Food
 }
 
 func NewKitchenSupervisor() ISupervisor {
 	return &KitchenSupervisor{
-		cooks: cook.CookEntityToService(repository.GetCooks()),
+		cooks: cook.EntityToService(repository.GetCooks()),
 		foods: repository.GetFoods(),
 	}
 }
 
-func (s *KitchenSupervisor) PrepareOrder(order dto.Order) {
+func (s *KitchenSupervisor) AddOrder(order dto.Order) {
+	s.queueMutex.Lock()
+	defer s.queueMutex.Unlock()
+	s.queue.Push(order)
+}
+
+
+func (s *KitchenSupervisor) Initialize(){
+	logger.LogMessage("Starting kitchen supervisor")
+	s.queue = priorityqueue.NewOrderQueue()
+	go s.WatchOrderQueue()
+}
+
+func (s *KitchenSupervisor) WatchOrderQueue() {
+	for {
+		s.queueMutex.Lock()
+		for idx := 0; idx < s.queue.Len(); idx++{
+			if s.findCook(s.queue.Check(idx).MaxOrderRank) != nil {	
+				go s.prepareOrder(s.queue.Remove(idx))
+			}
+		}
+		s.queueMutex.Unlock()
+		time.Sleep(time.Second * 1) 
+	}
+}
+
+func (s *KitchenSupervisor) getOrderQueue() priorityqueue.IQueue {
+	s.queueMutex.Lock()
+	defer s.queueMutex.Unlock()
+	return s.queue
+}
+
+func (s *KitchenSupervisor) prepareOrder(order dto.Order) {
 	logger.LogMessageF("Preparing order %v", order.OrderID)
 
 	itemChan := make(chan int, 1)
 
 	for idx, val := range order.Items {
-		go s.PrepareItem(s.foods[val], idx, itemChan)
+		go s.prepareItem(s.foods[val], idx, itemChan)
 	}
 
 	for len(order.Items) > 0 {
 		<-itemChan
 
-		order.Items = order.Items[:len(order.Items)-1]
+		order.Items = order.Items[:len(order.Items)-1] 
 	}
 }
 
-func (s *KitchenSupervisor) FindCook() *cook.Cook {
+func (s *KitchenSupervisor) prepareItem(item entity.Food, itemIdx int, itemChan chan<- int){
+	var currCook *cook.Cook
+
+	for currCook == nil {
+		currCook = s.findCook(item.Complexity)
+		time.Sleep(time.Second)		
+	}
+
+	cookID := currCook.GetID()
+	logger.LogCookF(cookID, "Preparing item %d", item.ID)
+
+	currCook.Prepare(item, itemIdx, itemChan)
+
+	logger.LogCookF(cookID, "Item %d is ready", item.ID)
+}
+
+func (s *KitchenSupervisor) findCook(rankReq int) *cook.Cook{
 	s.cooksMutex.Lock()
 	defer s.cooksMutex.Unlock()
 	for idx, _ := range s.cooks {
-		if s.cooks[idx].GetState() == cook.Free {
-			s.cooks[idx].SetState(cook.Busy)
+		if s.cooks[idx].GetState() == cook.Free && s.cooks[idx].Rank >= rankReq {
 			return &s.cooks[idx]
 		}
 	}
 	return nil
-}
-
-func (s *KitchenSupervisor) PrepareItem(item entity.Food, itemIdx int, itemChan chan<- int) {
-	var currCook *cook.Cook
-
-	for currCook == nil {
-		currCook = s.FindCook()
-		time.Sleep(time.Second)
-	}
-	logger.LogMessageF("Found cook")
-
-	currCook.Prepare(item, itemIdx, itemChan)
-
-	logger.LogMessageF("Item %d is ready", item.ID)
 }
